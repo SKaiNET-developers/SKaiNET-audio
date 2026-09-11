@@ -3,9 +3,13 @@
 plugins {
     alias(libs.plugins.kotlinMultiplatform) apply false
     alias(libs.plugins.androidMultiplatformLibrary) apply false
+    alias(libs.plugins.vanniktech.mavenPublish) apply false
 }
 
+// GROUP / VERSION_NAME come from gradle.properties — the same keys the vanniktech Maven publish
+// plugin reads for its auto-coordinates, so `project(":audio-x")` dependencies between modules
+// resolve to the exact published coordinates in every POM (mirrors SKaiNET's root build).
 allprojects {
-    group = (findProperty("group") as String?) ?: "sk.ainet.audio"
-    version = (findProperty("VERSION_NAME") as String?) ?: "0.1.0"
+    group = providers.gradleProperty("GROUP").getOrElse("sk.ainet.audio")
+    version = providers.gradleProperty("VERSION_NAME").getOrElse("unspecified")
 }

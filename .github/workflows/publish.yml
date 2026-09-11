@@ -1,0 +1,64 @@
+name: release
+
+# Tag-triggered Maven Central release — same shape as the SKaiNET engine repo's publish.yml,
+# minus its native-kernel matrix (skainet-audio is pure Kotlin, no CMake/NDK step).
+#
+# Runs on macOS so every Kotlin/Native target in the modules (iosArm64, macosArm64,
+# linuxArm64, androidNativeArm32/64) can be compiled and published from one host.
+
+on:
+  push:
+    tags:
+      - '**'
+
+# Publishing authenticates to Maven Central and signs with GPG through repository secrets,
+# which are independent of GITHUB_TOKEN — nothing here needs write access to the repository.
+permissions: {}
+
+jobs:
+  publish:
+    name: Release build and publish
+    runs-on: macOS-latest
+    timeout-minutes: 90
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+        with:
+          distribution: 'zulu'
+          java-version: 25
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+
+      - name: Validate signing configuration
+        run: |
+          if ! grep -Eq '^[[:space:]]*signAllPublications[[:space:]]*=[[:space:]]*true[[:space:]]*$' gradle.properties; then
+            echo "signAllPublications must be set to true in gradle.properties to publish." >&2
+            echo "Current setting:" >&2
+            grep -n 'signAllPublications' gradle.properties || echo "No signAllPublications property found" >&2
+            exit 1
+          fi
+
+      - name: Verify tag matches VERSION_NAME
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          VERSION="$(grep -E '^VERSION_NAME=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')"
+          if [ "$TAG" != "$VERSION" ]; then
+            echo "Tag '${GITHUB_REF_NAME}' does not match VERSION_NAME=${VERSION} in gradle.properties." >&2
+            exit 1
+          fi
+
+      - name: Publish to MavenCentral
+        run: ./gradlew publish --no-configuration-cache --stacktrace
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.GPG_PRIVATE_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}

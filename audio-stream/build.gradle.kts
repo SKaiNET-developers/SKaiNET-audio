@@ -4,6 +4,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidMultiplatformLibrary)
+    alias(libs.plugins.vanniktech.mavenPublish)
 }
 
 // Flow windowing / buffering utilities shared by the streaming ASR runtimes.

@@ -23,3 +23,37 @@ no SKaiNET/tensor dependency — an official SKaiNET project, MIT licensed.
 
 Origin: generalized from the proven [SKaiNET-whisper-KMP](../SKaiNET-whisper-KMP) audio/stream
 modules (mel verified bit-exact against `whisper.log_mel_spectrogram`, cosine ≈ 1.0).
+
+## Using the published artifacts
+
+All modules publish to Maven Central under the `sk.ainet.audio` group, artifact ID = module name:
+
+```kotlin
+dependencies {
+    implementation("sk.ainet.audio:audio-mel:0.1.0")   // pulls audio-core transitively
+    implementation("sk.ainet.audio:audio-vad:0.1.0")
+}
+```
+
+## Publishing
+
+Publishing mirrors the [SKaiNET](https://github.com/SKaiNET-developers/skainet) engine repo:
+the [vanniktech maven-publish plugin](https://github.com/vanniktech/gradle-maven-publish-plugin)
+with POM metadata and Maven Central flags in `gradle.properties`, and a tag-triggered
+`release` workflow (`.github/workflows/publish.yml`).
+
+1. Bump `VERSION_NAME` in `gradle.properties`.
+2. Tag the commit with that exact version (`0.2.0` or `v0.2.0`) and push the tag. The workflow
+   refuses tags that disagree with `VERSION_NAME`.
+3. The workflow signs every publication and uploads to Maven Central. Required repository
+   secrets: `MAVEN_CENTRAL_USERNAME`, `MAVEN_CENTRAL_PASSWORD`, `GPG_PRIVATE_KEY`,
+   `SIGNING_PASSWORD` — the same names the SKaiNET repo uses.
+
+Every push/PR to `main`/`develop` runs `verify-poms.yml`, which publishes to Maven local without
+signing and checks that no POM carries `unspecified` versions or wrong sibling coordinates.
+To test locally:
+
+```
+./gradlew publishToMavenLocal -PRELEASE_SIGNING_ENABLED=false -PsignAllPublications=false
+./.github/scripts/validate-published-poms.sh
+```
