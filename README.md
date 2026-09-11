@@ -1,4 +1,7 @@
-# skainet-audio
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENCE)
+[![Maven Central](https://img.shields.io/maven-central/v/sk.ainet.audio/audio-vad-js.svg)](https://central.sonatype.com/artifact/sk.ainet.audio/audio-vad-js)
+
+# SKaiNET-audio
 
 Shared audio preprocessing and streaming utilities for the SKaiNET ASR family
 ([skainet-moonshine](../skainet-moonshine), skainet-parakeet). Pure Kotlin Multiplatform,
