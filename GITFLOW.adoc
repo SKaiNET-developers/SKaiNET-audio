@@ -1,0 +1,56 @@
+= GitFlow Workflow
+:toc:
+:toclevels: 2
+
+SKaiNET-audio follows the same branching model as the
+https://github.com/SKaiNET-developers/SKaiNET/blob/develop/GITFLOW.adoc[SKaiNET engine repository].
+This page states the parts that matter day to day; the engine's document is the full reference.
+
+== Branches
+
+`develop`::
+  The integration branch and the repository's default branch. Feature branches merge here.
+
+`main`::
+  Tracks the most recently published release, nothing more. If it is on `main`, it has a tag and a
+  Maven Central publish behind it. `main` is only ever fast-forwarded to a release commit *after*
+  that release's publish workflow has gone green.
+
+`feature/*`::
+  Branch from `develop`, merge back to `develop` by pull request, delete after merge.
+
+`release/X.Y.Z`::
+  Branch from `develop`. Holds the changelog entry and the `VERSION_NAME` bump. Merged back to
+  `develop` by pull request; its own release commit is what gets tagged.
+
+`hotfix/*`::
+  Branch from `main`, merge back to `main` and `develop`.
+
+== Release process
+
+The Maven Central publish workflow (`.github/workflows/publish.yml`) triggers on any pushed tag
+and refuses to run unless the tag (with an optional `v` prefix stripped) equals `VERSION_NAME` in
+`gradle.properties`. The tag therefore lives on the release branch's own commit, independent of
+`main`.
+
+. `git checkout develop && git pull && git checkout -b release/X.Y.Z`
+. Add the `CHANGELOG.md` entry, then bump `VERSION_NAME` in `gradle.properties` as the last commit,
+  titled `release: X.Y.Z`.
+. `git push origin release/X.Y.Z` and open a pull request to `develop`; merge once CI is green.
+. Tag the release commit with an annotated tag and push it:
++
+[source,bash]
+----
+git tag -a X.Y.Z <release-commit-sha> -m "SKaiNET-audio X.Y.Z — <headline>"
+git push origin X.Y.Z
+----
+. Wait for the `release` workflow to succeed. A red run means the tag exists but nothing shipped.
+. Fast-forward `main`: `git push origin <release-commit-sha>:refs/heads/main`.
+. Delete the release branch.
+
+== Conventions
+
+* Tags are plain semantic versions without a `v` prefix, matching the engine repository since
+  0.51.0.
+* Commit messages are imperative and explain why, not only what.
+* `.gradle/`, `build/` and IDE files are ignored; never commit them.
