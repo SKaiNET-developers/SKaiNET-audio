@@ -34,7 +34,12 @@ for module in "${EXPECTED_MODULES[@]}"; do
   fi
 done
 
-mapfile -t POMS < <(find "${REPO_ROOT}" -type f -name '*.pom' | sort)
+# Collect POM paths without `mapfile`: the workflow runs on macOS, whose /bin/bash is 3.2 and
+# has no `mapfile`/`readarray`. A `while read` loop is portable to every bash the runners ship.
+POMS=()
+while IFS= read -r pom_path; do
+  POMS+=("${pom_path}")
+done < <(find "${REPO_ROOT}" -type f -name '*.pom' | sort)
 
 if [[ ${#POMS[@]} -eq 0 ]]; then
   echo "ERROR: no .pom files under ${REPO_ROOT}" >&2
