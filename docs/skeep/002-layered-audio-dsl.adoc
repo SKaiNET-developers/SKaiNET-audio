@@ -1,0 +1,236 @@
+= SKEEP-002: Layered audio DSL
+:description: SKaiNET proposal for a layered audio front-end — a dependency-free pure-Kotlin reference core plus a traceable, dtype-typed `ctx.ops` audio DSL that fuses into the model graph.
+
+Status: Draft (LOCAL — not yet submitted to the upstream SKEEP track) +
+Audience: SKaiNET maintainers, `skainet-audio` / ASR-cartridge contributors +
+Created: 2026-07-20 +
+Provisional number: 002 (numbers are assigned on acceptance)
+
+[NOTE]
+====
+This is a *local working draft* authored from the ASR-cartridge effort
+(`skainet-moonshine` / `skainet-audio`). It is kept in the `skainet-audio` repo, not
+pushed to the upstream SKaiNET SKEEP module, until there is appetite to adopt it.
+====
+
+== Summary
+
+`skainet-audio` today is deliberately dependency-free: mel spectrogram, resampling, WAV I/O,
+windowing, and VAD operate on plain `FloatArray` / `FeatureFrames`, with no SKaiNET tensor,
+`ExecutionContext`, or backend dependency. That is the right default for *fixed, host-side, batch*
+preprocessing (e.g. a Whisper log-mel that is a bit-exact reference and must not be pulled into the
+compiled graph).
+
+It is *not* enough for audio to be a full member of the SKaiNET family. Three things a pure
+`FloatArray` front-end structurally cannot provide:
+
+1. *Fused, quantizable on-device graphs* — a single compiled artifact from raw audio → features →
+   encoder → logits, with the front-end calibrated and quantized alongside the model, no CPU↔NPU
+   round-trip.
+2. *Learnable front-ends* — trainable filterbanks, SincNet, wav2vec-style feature encoders — which
+   require differentiable `Module` s.
+3. *Type safety* that eliminates the most common ASR bug class (wrong sample rate / channel layout /
+   frame shape reaching the model).
+
+This SKEEP proposes a *layered* design: keep the pure-Kotlin core as a golden reference, and add a
+`ctx.ops`-based audio DSL layer (traceable, dtype-typed, fusable, quantizable, optionally
+differentiable) on top — with the two layers cross-validated by the numeric-diff harness SKaiNET
+already uses for eager-vs-compiled parity.
+
+== Motivation
+
+=== The pure core is correct but partial
+
+The current `skainet-audio` (`audio-core`, `audio-wav`, `audio-mel`, `audio-source`,
+`audio-stream`, `audio-vad`) is pure Kotlin. Advantages that must be preserved:
+
+* zero coupling — no BOM, no backend, compiles on every KMP target including androidNative;
+* one canonical, bit-exact implementation (mel verified vs `whisper.log_mel_spectrogram`, cosine ≈ 1.0);
+* a clean cartridge boundary (`PCM in → transcript out`), with the single tensor conversion happening
+  at the model seam via `ctx.fromFloatArray`.
+
+The limitation is equally concrete:
+
+* `FeatureFrames` only validates `rows * cols == size` at runtime. Nothing prevents a 24 kHz array
+  reaching a 16 kHz front-end, stereo where mono is expected, or a transposed frame layout — the
+  single most common ASR defect.
+* Preprocessing is an FP32 host-side island: the PTQ observers tap `ctx.ops.matmul`, so an
+  out-of-graph mel is never calibrated or quantized, even when the model is int8 for an NPU.
+* A pure-Kotlin front-end can never be *trained*.
+
+=== The precedent already exists in-house
+
+Moonshine has *no mel*: raw 16 kHz PCM goes through a strided conv stem that IS a learnable,
+in-graph front-end authored in the NN DSL (`sk.ainet.models.moonshine.MoonshinePreprocessor`,
+`ctx.ops.conv1d` + GroupNorm). So "audio as a differentiable, traceable, fusable front-end" is not
+hypothetical — for one shipping model it is already the design, and `skainet-audio`'s role there is
+reduced to resampling + VAD. This SKEEP generalizes that pattern so mel/STFT-based front-ends
+(Whisper, Parakeet's 128-mel + subsampling) can opt into the same treatment.
+
+=== The STFT is a matmul, not an FFT — which makes this tractable
+
+The existing pure mel does *not* use an FFT: it precomputes `cos`/`sin` DFT basis tables of shape
+`[nBins, nFft]` and applies them as an explicit dot product per frame, then applies the mel
+filterbank (another matmul), then a log/normalize. Every step is already a fixed linear op plus
+elementwise. Porting to `ctx.ops` is therefore *two matmuls* (DFT basis, then filterbank) plus
+windowing/log — all of which lower cleanly to StableHLO and quantize, with no FFT primitive and no
+`custom_call`. For `nFft = 400`/`512` and modest frame counts the `O(nFft²)` DFT-matmul is
+negligible next to the transformer, and on an NPU the matmul is the *fast* path. This defuses the
+usual "FFT lowering is awkward" objection for the fixed-window case.
+
+== Proposed design
+
+A four-layer stack. Layers 0–1 are pure Kotlin (present or a small addition); layers 2–3 are the new
+SKaiNET-native audio DSL.
+
+=== Layer 0 — pure-Kotlin reference core (unchanged)
+
+`MelSpectrogram`, `Resampler`, `Wav`, `Endpointer`, `windows(...)` stay exactly as they are:
+dependency-free, bit-exact, the golden reference. Non-SKaiNET consumers and the host batch path use
+this directly.
+
+=== Layer 1 — typed audio units (pure Kotlin, additive)
+
+Cheap value types that carry sample rate / channel layout in the type, catching the wrong-rate bug
+at compile time without any tensor dependency:
+
+[source,kotlin]
+----
+@JvmInline public value class SampleRate(public val hz: Int)
+
+/** Mono float PCM in [-1, 1] at a known rate. */
+public class Pcm(public val samples: FloatArray, public val rate: SampleRate)
+
+public val Rate16k: SampleRate get() = SampleRate(16_000)
+----
+
+`AudioSource.pcmChunks()` and `Resampler.to16k(...)` gain typed overloads; existing `FloatArray`
+APIs remain.
+
+=== Layer 2 — `ctx.ops` audio modules (new; depends only on `skainet-lang-core`)
+
+The front-end expressed as SKaiNET `Module` s, so it is dtype-typed (`Module<T, V>`), traceable
+(records into the tape → StableHLO → fused vmfb), quantizable (matmuls are visible to the PTQ
+observers), and — where weights are parameters rather than constants — differentiable. Depending
+only on `skainet-lang-core` keeps the *full* target matrix incl. androidNative, exactly as
+`transformer-core` does.
+
+[source,kotlin]
+----
+// STFT as a fixed DFT-basis matmul (cos/sin tables baked as constants).
+public class Stft<T : DType, V>(
+    nFft: Int, hop: Int, window: Window = Window.HannPeriodic,
+) : Module<T, V>()
+
+// Triangular mel filterbank as a [nMels, nBins] matmul; filters may be a
+// constant (fixed) or a ModuleParameter (LEARNABLE filterbank).
+public class MelFilterbank<T : DType, V>(
+    filters: Tensor<T, V>, learnable: Boolean = false,
+) : Module<T, V>()
+
+// Composed: Stft -> power -> MelFilterbank -> log/normalize, matching MelConfig.
+public class LogMel<T : DType, V>(config: MelConfig) : Module<T, V>()
+
+public class Resample<T : DType, V>(from: SampleRate, to: SampleRate) : Module<T, V>()
+----
+
+Same `MelConfig` presets as Layer 0 (`whisper()`, `parakeet()`), so the two layers are configured
+identically and can be diffed. Fixed front-ends bake `cos`/`sin`/filterbank as constants (const-fold
+in the graph); learnable ones expose them as `ModuleParameter` s and train through the standard tape.
+
+=== Layer 3 — audio pipeline DSL (new; sugar over Layer 2 + the data pipeline)
+
+A composable, typed builder that reads like the data-pipeline DSL and produces either an eager
+`FeatureFrames`/tensor or a traceable graph fragment for fusion:
+
+[source,kotlin]
+----
+val features = audioPipeline<FP32, Float>(ctx) {
+    source(wav)                       // AudioSource or Flow<FloatArray>
+    resample(Rate16k)
+    logMel(MelConfig.whisper())
+    normalize(PerFeature)
+}                                     // -> Tensor<FP32, Float> [nMels, frames]
+----
+
+Because the stages are Layer-2 `Module` s, the same pipeline traces via the existing `HloRecorder`
+and can be *prepended to the model graph* so a single vmfb runs raw audio → text. For Moonshine the
+pipeline is `resample → (model conv stem)`; for Whisper/Parakeet it is `resample → logMel → model`.
+
+=== Cross-validation (the load-bearing guarantee)
+
+Layer 0 is the oracle for Layer 2. A shared conformance test asserts the traced/eager DSL output
+matches the pure reference within tolerance — the exact eager-vs-IREE numeric-diff pattern already in
+the ASR repos:
+
+[source,kotlin]
+----
+val golden = MelSpectrogram(filterbank, cfg).logMel(pcm)            // Layer 0
+val dsl    = LogMel<FP32, Float>(cfg).forward(pcm.asTensor(ctx), ctx) // Layer 2
+assertClose(golden.data, dsl.data.copyToFloatArray(), tol = 1e-4f)
+----
+
+== Compatibility and migration
+
+* *Fully additive.* Layer 0 is untouched; all current `skainet-audio` APIs keep working. Layers 1–3
+  are new modules/artifacts (`audio-units`, `audio-dsl`), so existing consumers see no change and
+  opt in explicitly.
+* Consumers choosing the DSL depend on `skainet-lang-core` (which they already have if they run a
+  model). The pure core remains available with no SKaiNET dependency for host/batch use.
+* No change to the cartridge contract: it stays `PCM in → transcript out`. Fusion is an internal
+  packaging choice of the cartridge, invisible to adapters.
+
+== Rollout plan
+
+Phase 1:: Layer 1 typed units in `skainet-audio`; adopt in `AudioSource`/`Resampler` overloads.
+Phase 2:: Layer 2 `LogMel`/`Stft`/`MelFilterbank`/`Resample` modules (fixed-weight first), with the
+Layer-0-vs-Layer-2 conformance harness green for `MelConfig.whisper()` and `.parakeet()`.
+Phase 3:: Layer 3 `audioPipeline { }` builder; wire one ASR repo (Whisper or Parakeet) to fuse
+`resample → logMel → encoder` into a single StableHLO export and diff vs the split path.
+Phase 4:: Learnable filterbank / trainable front-end support (parameters + autodiff), and int8 PTQ of
+the fused front-end validated on the target NPU hardware.
+
+== Acceptance criteria
+
+* Layer 2 `LogMel` matches the Layer 0 reference within 1e-4 (cosine ≥ 0.9999) for the Whisper and
+  Parakeet presets, eager and after StableHLO lowering.
+* A fused `resample → logMel → encoder` graph compiles to one vmfb and transcribes token-identically
+  to the split (host-mel + model) path on the reference WAV set.
+* The pure core still builds with no SKaiNET dependency on all KMP targets.
+* A learnable filterbank trains end-to-end through the tape (finite-difference gradient parity).
+
+== Risks
+
+Variable-length audio vs fixed-shape compilation:: Same bucketing problem the Moonshine encoder
+has; the fused front-end inherits it. Mitigate with length buckets, or keep the mel host-side
+(Layer 0) when a single dynamic vmfb is not available.
+Numeric divergence across backends:: Multiple backends computing the same preprocessing can disagree
+at ~1e-6. Mitigated by treating Layer 0 as the oracle and gating on the conformance harness; for a
+*fused, single-compiled* front-end there is only one artifact per target, so the concern reduces to
+export-vs-reference, which the harness already covers.
+Scope creep:: The DSL must not absorb every DSP feature. Keep Layer 2 to the ops that fuse/quantize/
+train usefully (STFT-matmul, filterbank, log/normalize, resample); leave exotic host DSP in Layer 0.
+
+== Open questions
+
+* OQ1 — Should Layer 3 reuse the existing `dataPipeline<T>()` stage machinery directly, or a
+  parallel `audioPipeline` that lowers to the same tape? (Prefer reuse if the stage contracts fit.)
+* OQ2 — Windowing/framing in-graph: `unfold` + `narrow` vs a dedicated framing op. Does the current
+  `TensorOps.unfold` lowering cover strided overlapping frames on IREE?
+* OQ3 — Resampling in-graph is only clean for integer ratios; arbitrary-rate resample may stay
+  Layer 0. Which rates must fuse?
+* OQ4 — Where do the typed units live so both the pure core and the DSL share them without the core
+  gaining a dependency (a tiny `audio-units` leaf)?
+
+== References
+
+* `skainet-audio`: `audio-mel/MelSpectrogram.kt` (the DFT-basis-matmul reference), `audio-core`,
+  `audio-vad`.
+* `sk.ainet.models.moonshine.MoonshinePreprocessor` (in-graph learnable conv front-end) — the
+  precedent.
+* `transformer-core` (`skainet-lang-core`-only, full androidNative matrix) — the dependency model
+  Layer 2 follows.
+* The eager-vs-IREE numeric-diff harness (`HloRecorder` + eager reference) — the cross-validation
+  mechanism.
+* SKEEP-001 (tensor collection literals) — sibling DSL-ergonomics proposal.
+* `spec-cartridge.md` — the `PCM in → transcript out` boundary this SKEEP preserves.
