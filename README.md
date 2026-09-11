@@ -3,9 +3,7 @@
 
 # SKaiNET-audio
 
-Shared audio preprocessing and streaming utilities for the SKaiNET ASR family
-([skainet-moonshine](../skainet-moonshine), skainet-parakeet). Pure Kotlin Multiplatform,
-no SKaiNET/tensor dependency — an official SKaiNET project, MIT licensed.
+Shared audio preprocessing and streaming utilities for the SKaiNET.
 
 ## Modules
 
