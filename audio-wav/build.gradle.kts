@@ -21,6 +21,7 @@ kotlin {
     iosArm64()
     macosArm64()
     linuxArm64()
+    linuxX64()
     js { browser() }
     @OptIn(ExperimentalWasmDsl::class) wasmJs { browser() }
 

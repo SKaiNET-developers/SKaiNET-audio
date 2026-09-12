@@ -22,6 +22,7 @@ kotlin {
     iosArm64()
     macosArm64()
     linuxArm64()
+    linuxX64()
     @OptIn(ExperimentalWasmDsl::class) wasmJs { browser() }
 
     sourceSets {
