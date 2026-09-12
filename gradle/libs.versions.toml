@@ -16,3 +16,8 @@ junit                   = { module = "junit:junit", version.ref = "junit" }
 kotlinMultiplatform         = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 androidMultiplatformLibrary = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
 vanniktech-mavenPublish     = { id = "com.vanniktech.maven.publish", version = "0.37.0" }
+# No version here -- both resolved once via pluginManagement.plugins{} in settings.gradle.kts
+# (see that file's comment for why: declaring a version at each application site too conflicts
+# once more than one plugin ID from the same implementation jar is applied in one build).
+skainet-multiplatform       = { id = "sk.ainet.multiplatform" }
+skainet-npmPins             = { id = "sk.ainet.npm-pins" }

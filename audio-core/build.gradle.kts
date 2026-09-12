@@ -1,32 +1,13 @@
-import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-
 plugins {
-    alias(libs.plugins.kotlinMultiplatform)
+    alias(libs.plugins.skainet.multiplatform)
     alias(libs.plugins.androidMultiplatformLibrary)
     alias(libs.plugins.vanniktech.mavenPublish)
 }
 
-kotlin {
-    android {
-        namespace = "sk.ainet.audio.core"
-        compileSdk = libs.versions.android.compileSdk.get().toInt()
-        minSdk = libs.versions.android.minSdk.get().toInt()
-        compilerOptions { jvmTarget.set(JvmTarget.JVM_11) }
-    }
-
-    jvm()
-    androidNativeArm32()
-    androidNativeArm64()
-    iosArm64()
-    macosArm64()
-    linuxArm64()
-    js { browser() }
-    @OptIn(ExperimentalWasmDsl::class) wasmJs { browser() }
-
-    sourceSets {
-        commonTest.dependencies {
-            implementation(libs.kotlin.test)
-        }
-    }
+// Targets: gradle.properties (skainet.targets) -- must be readable while the plugin applies,
+// see SkainetTargets' own doc comment for why this can't live in the skainet { } block below.
+// kotlin-test in commonTest is added automatically (SkainetMultiplatformExtension's
+// kotlinTestInCommonTest default), so no explicit dependencies block is needed here.
+skainet {
+    namespace = "sk.ainet.audio.core"
 }

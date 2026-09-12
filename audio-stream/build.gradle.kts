@@ -1,35 +1,21 @@
-import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-
 plugins {
-    alias(libs.plugins.kotlinMultiplatform)
+    alias(libs.plugins.skainet.multiplatform)
     alias(libs.plugins.androidMultiplatformLibrary)
     alias(libs.plugins.vanniktech.mavenPublish)
 }
 
 // Flow windowing / buffering utilities shared by the streaming ASR runtimes.
+// Targets: gradle.properties (skainet.targets, no js -- wasmJs only).
+skainet {
+    namespace = "sk.ainet.audio.stream"
+}
+
 kotlin {
-    android {
-        namespace = "sk.ainet.audio.stream"
-        compileSdk = libs.versions.android.compileSdk.get().toInt()
-        minSdk = libs.versions.android.minSdk.get().toInt()
-        compilerOptions { jvmTarget.set(JvmTarget.JVM_11) }
-    }
-
-    jvm()
-    androidNativeArm32()
-    androidNativeArm64()
-    iosArm64()
-    macosArm64()
-    linuxArm64()
-    @OptIn(ExperimentalWasmDsl::class) wasmJs { browser() }
-
     sourceSets {
         commonMain.dependencies {
             implementation(libs.kotlinx.coroutines)
         }
         commonTest.dependencies {
-            implementation(libs.kotlin.test)
             implementation(libs.kotlinx.coroutines.test)
         }
     }
