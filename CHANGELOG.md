@@ -6,6 +6,22 @@ All notable changes to SKaiNET-audio are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-12
+
+### Added
+
+- `linuxX64` target across all six modules (alongside the existing `linuxArm64`).
+- `.github/dependabot.yml` — automated `gradle` and `github-actions` dependency-CVE scanning
+  (there was none before this release).
+
+### Changed
+
+- All six modules now adopt `sk.ainet.multiplatform`/`sk.ainet.npm-pins` from
+  [SKaiNET-build-logic](https://github.com/SKaiNET-developers/SKaiNET-build-logic) instead of
+  hand-rolled per-module target lists and `android {}` blocks — no functional change, but the
+  `linuxX64` gap above is now structurally impossible to reintroduce (the shared `linux` target
+  group always adds `linuxX64` and `linuxArm64` together).
+
 ## [0.1.0] - 2026-09-11
 
 First public release. Pure Kotlin Multiplatform audio preprocessing and streaming
@@ -34,5 +50,6 @@ Generalized from the audio and stream modules of the SKaiNET Whisper project.
 - Maven Central publishing under `sk.ainet.audio:audio-*`, mirroring the SKaiNET engine
   repository's release workflow.
 
-[Unreleased]: https://github.com/SKaiNET-developers/SKaiNET-audio/compare/0.1.0...HEAD
+[Unreleased]: https://github.com/SKaiNET-developers/SKaiNET-audio/compare/0.2.0...HEAD
+[0.2.0]: https://github.com/SKaiNET-developers/SKaiNET-audio/compare/0.1.0...0.2.0
 [0.1.0]: https://github.com/SKaiNET-developers/SKaiNET-audio/releases/tag/0.1.0
