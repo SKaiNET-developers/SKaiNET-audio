@@ -22,14 +22,20 @@ Shared audio preprocessing and streaming utilities for the SKaiNET.
 ./gradlew build          # or :audio-mel:jvmTest etc.
 ```
 
+Every module's KMP target declarations, Android setup, and npm/dependency pinning come from
+[SKaiNET-build-logic](https://github.com/SKaiNET-developers/SKaiNET-build-logic)'s
+`sk.ainet.multiplatform`/`sk.ainet.npm-pins` convention plugins (as of 0.2.0) instead of being
+hand-rolled per module — see that repo for what each plugin does, and a given module's own
+`gradle.properties` (`skainet.targets=...`) for its exact target set.
+
 ## Using the published artifacts
 
 All modules publish to Maven Central under the `sk.ainet.audio` group, artifact ID = module name:
 
 ```kotlin
 dependencies {
-    implementation("sk.ainet.audio:audio-mel:0.1.0")   // pulls audio-core transitively
-    implementation("sk.ainet.audio:audio-vad:0.1.0")
+    implementation("sk.ainet.audio:audio-mel:0.2.0")   // pulls audio-core transitively
+    implementation("sk.ainet.audio:audio-vad:0.2.0")
 }
 ```
 
