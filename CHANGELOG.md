@@ -6,6 +6,14 @@ All notable changes to SKaiNET-audio are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Bumped `sk.ainet.multiplatform`/`sk.ainet.npm-pins` from `1.0.0` to `1.1.0` — picks up the
+  new centralized `jvmTarget` default (`JvmTarget.JVM_17` for the plain `jvm()` target),
+  previously left unset and implicitly following whatever JDK ran the build. No source changes
+  needed; verified via `javap` that compiled class files now carry major version 61 (Java 17)
+  regardless of host JDK.
+
 ## [0.2.0] - 2026-09-12
 
 ### Added
