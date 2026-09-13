@@ -6,6 +6,8 @@ All notable changes to SKaiNET-audio are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-13
+
 ### Changed
 
 - Bumped `sk.ainet.multiplatform`/`sk.ainet.npm-pins` from `1.0.0` to `1.1.0` — picks up the
@@ -58,6 +60,7 @@ Generalized from the audio and stream modules of the SKaiNET Whisper project.
 - Maven Central publishing under `sk.ainet.audio:audio-*`, mirroring the SKaiNET engine
   repository's release workflow.
 
-[Unreleased]: https://github.com/SKaiNET-developers/SKaiNET-audio/compare/0.2.0...HEAD
+[Unreleased]: https://github.com/SKaiNET-developers/SKaiNET-audio/compare/0.2.1...HEAD
+[0.2.1]: https://github.com/SKaiNET-developers/SKaiNET-audio/compare/0.2.0...0.2.1
 [0.2.0]: https://github.com/SKaiNET-developers/SKaiNET-audio/compare/0.1.0...0.2.0
 [0.1.0]: https://github.com/SKaiNET-developers/SKaiNET-audio/releases/tag/0.1.0

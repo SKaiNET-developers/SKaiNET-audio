@@ -34,8 +34,8 @@ All modules publish to Maven Central under the `sk.ainet.audio` group, artifact 
 
 ```kotlin
 dependencies {
-    implementation("sk.ainet.audio:audio-mel:0.2.0")   // pulls audio-core transitively
-    implementation("sk.ainet.audio:audio-vad:0.2.0")
+    implementation("sk.ainet.audio:audio-mel:0.2.1")   // pulls audio-core transitively
+    implementation("sk.ainet.audio:audio-vad:0.2.1")
 }
 ```
 
