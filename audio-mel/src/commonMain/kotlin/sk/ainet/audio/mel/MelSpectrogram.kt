@@ -5,7 +5,6 @@ import sk.ainet.audio.core.FeatureExtractor
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.log10
-import kotlin.math.sin
 
 /**
  * Mel front-end parameters. Presets cover the ASR models this family supports; anything else is a
@@ -45,7 +44,7 @@ public enum class MelNorm {
 }
 
 /**
- * Log-mel spectrogram, pure Kotlin (reflect-pad ±nFft/2, periodic Hann, nFft-point DFT, mel
+ * Log-mel spectrogram, pure Kotlin (reflect-pad ±nFft/2, periodic Hann, nFft-point FFT, mel
  * filterbank, then [MelNorm]). With `MelConfig.whisper()` and Whisper's shipped filterbank this is
  * verified against `whisper.log_mel_spectrogram` (cosine ≈ 1.0) — the generalized port of the
  * proven `WhisperMel`.
@@ -66,12 +65,16 @@ public class MelSpectrogram(
 
     init { require(filters.size == nMels * nBins) { "filterbank ${filters.size} != $nMels*$nBins" } }
 
+    // Each mel filter is non-zero on a narrow band of bins only: summing over [bandStart, bandEnd) skips exact zeros,
+    // so the result is the same as over all bins, at a fraction of the cost.
+    private val bandStart = IntArray(nMels) { m -> (0 until nBins).firstOrNull { filters[m * nBins + it] != 0f } ?: 0 }
+    private val bandEnd = IntArray(nMels) { m -> ((nBins - 1 downTo 0).firstOrNull { filters[m * nBins + it] != 0f } ?: -1) + 1 }
+
     // periodic Hann (denominator nFft, matching torch.hann_window(periodic=true))
     private val hann = FloatArray(nFft) { (0.5 - 0.5 * cos(2.0 * PI * it / nFft)).toFloat() }
 
-    // DFT tables: cos/sin(2π k n / nFft); sign irrelevant since we take magnitude².
-    private val cosT = Array(nBins) { k -> FloatArray(nFft) { n -> cos(2.0 * PI * k * n / nFft).toFloat() } }
-    private val sinT = Array(nBins) { k -> FloatArray(nFft) { n -> sin(2.0 * PI * k * n / nFft).toFloat() } }
+    // mixed-radix FFT: nFft = 400 (Whisper) is 4·4·5·5, so no power-of-two restriction
+    private val spectrum = PowerSpectrum(nFft)
 
     override fun extract(pcm16k: FloatArray): FeatureFrames = logMel(pcm16k)
 
@@ -84,18 +87,14 @@ public class MelSpectrogram(
         val mel = FloatArray(nMels * frames)
         val frame = FloatArray(nFft)
         val power = FloatArray(nBins)
+        val workspace = spectrum.workspace()
         for (f in 0 until frames) {
             val off = f * hop
             for (n in 0 until nFft) frame[n] = padded[off + n] * hann[n]
-            for (k in 0 until nBins) {
-                var re = 0f; var im = 0f
-                val ck = cosT[k]; val sk = sinT[k]
-                for (n in 0 until nFft) { re += frame[n] * ck[n]; im += frame[n] * sk[n] }
-                power[k] = re * re + im * im
-            }
+            spectrum.power(frame, power, workspace)
             for (m in 0 until nMels) {
                 var s = 0f; val base = m * nBins
-                for (k in 0 until nBins) s += filters[base + k] * power[k]
+                for (k in bandStart[m] until bandEnd[m]) s += filters[base + k] * power[k]
                 mel[m * frames + f] = s
             }
         }
