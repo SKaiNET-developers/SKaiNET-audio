@@ -6,6 +6,16 @@ All notable changes to SKaiNET-audio are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **`audio-mel`: `MelSpectrogram` uses an FFT instead of the direct DFT** — a mixed-radix FFT
+  (radix 4, 2 and 5 butterflies in closed form, 3 and larger factors generically), so Whisper's
+  400-point frame (4·4·5·5) needs no power-of-two size. Each mel filter is summed over its non-zero
+  band only. A 4 s Whisper window takes 5.8 ms instead of 38 ms on the JVM, and on an arm32
+  Android device the log-mel drops from ≈ 0.88 s to ≈ 0.2 s; the 640 KB cos/sin tables are gone.
+  Output against the `whisper.log_mel_spectrogram` golden: cosine 0.99999999 (was 0.99999998).
+  `MelSpectrogram` stays safe to share across threads (the FFT's buffers are per call).
+
 ## [0.2.1] - 2026-09-13
 
 ### Changed
