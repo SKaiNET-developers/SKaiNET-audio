@@ -6,6 +6,8 @@ All notable changes to SKaiNET-audio are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-10-21
+
 ### Changed
 
 - **`audio-mel`: `MelSpectrogram` uses an FFT instead of the direct DFT** — a mixed-radix FFT
@@ -15,6 +17,9 @@ All notable changes to SKaiNET-audio are documented here. The format follows
   Android device the log-mel drops from ≈ 0.88 s to ≈ 0.2 s; the 640 KB cos/sin tables are gone.
   Output against the `whisper.log_mel_spectrogram` golden: cosine 0.99999999 (was 0.99999998).
   `MelSpectrogram` stays safe to share across threads (the FFT's buffers are per call).
+- CI: `android-actions/setup-android` 4.0.1 → 4.0.4 — 4.0.1 no longer installs the SDK on the
+  macOS 26 runner image (`sdkmanager`: "Failed to find package 'tools'"), which failed both the POM
+  check and the publish workflow.
 
 ## [0.2.1] - 2026-09-13
 
